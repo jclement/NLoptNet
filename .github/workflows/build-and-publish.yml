@@ -417,6 +417,20 @@ jobs:
 
           dotnet run
 
+      - name: Checkout repository for tests
+        uses: actions/checkout@v4
+
+      - name: Run comprehensive unit tests
+        run: |
+          # Restore test project
+          dotnet restore NLoptNet.Tests/NLoptNet.Tests.csproj
+
+          # Run tests with detailed output
+          dotnet test NLoptNet.Tests/NLoptNet.Tests.csproj \
+            --configuration Release \
+            --verbosity normal \
+            --logger "console;verbosity=detailed"
+
   publish-nuget:
     name: Publish to NuGet.org
     needs: [detect-version, test-package]

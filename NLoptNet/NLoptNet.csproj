@@ -4,6 +4,7 @@
 		<RuntimeIdentifiers>linux-arm64;linux-musl-x64;linux-x64;osx-x64;osx-arm64;win-x64;win-x86</RuntimeIdentifiers>
 		<TargetFrameworks>netstandard2.0;net6.0;net8.0</TargetFrameworks>
 		<RootNamespace>NLoptNet</RootNamespace>
+		<PackageId>JClement.NLoptNet</PackageId>
 		<PackageVersion>2.10.1</PackageVersion>
 		<Platforms>AnyCPU;x86</Platforms>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -19,8 +20,8 @@
 		<PackageLicenseExpression>LGPL-2.1-or-later</PackageLicenseExpression>
 		<AssemblyVersion>2.10.1.0</AssemblyVersion>
 		<FileVersion>2.10.1.0</FileVersion>
-		<Title>NLoptNet</Title>
-		<Description>This is a wrapper around the NLopt library. NLopt 2.10.1 binaries are included for Windows, Linux, and macOS (including Apple Silicon).</Description>
+		<Title>JClement.NLoptNet</Title>
+		<Description>Modernized C# wrapper around the NLopt library. NLopt 2.10.1 binaries are included for Windows, Linux, and macOS (including Apple Silicon). Fork of BrannonKing/NLoptNet with macOS support and modern .NET frameworks.</Description>
 		<Copyright>2026</Copyright>
 	</PropertyGroup>
 

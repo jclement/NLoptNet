@@ -1,8 +1,15 @@
 NLoptNet
 ========
 
-This is a C# wrapper around the NLopt C library. It includes both 32 and 64-bit DLLs for NLopt 2.6.1 (64-bit only on Linux). It inherits NLopt's LGPL license.
-Thanks to [ASI](http://asirobots.com) for sponsoring some time on this project.
+This is a C# wrapper around the NLopt C library. It includes native binaries for NLopt 2.10.1 across all major platforms:
+
+- **Windows**: x86, x64
+- **Linux**: x64, arm64, musl-x64 (Alpine)
+- **macOS**: x64 (Intel), arm64 (Apple Silicon)
+
+This package inherits NLopt's LGPL license.
+
+Originally created by [Brannon King](https://github.com/BrannonKing/NLoptNet). Thanks to [ASI](http://asirobots.com) for sponsoring some time on the original project. Modernization and macOS support by [Jeff Clement](https://github.com/jclement).
 
 Example:
 ```csharp
@@ -57,4 +64,47 @@ using(var solver = new NLoptSolver(NLoptAlgorithm.LN_AUGLAG, 2, 0.001, 1000, NLo
 	var result = solver.Optimize(best, out finalScore);
 }
 ```
-Contributions are welcome. Please read through the NLopt documentation before posting questions/issues here.
+## Installation
+
+Install via NuGet Package Manager:
+
+```
+Install-Package NLoptNet
+```
+
+Or via .NET CLI:
+
+```bash
+dotnet add package NLoptNet
+```
+
+Or add to your `.csproj` file:
+
+```xml
+<PackageReference Include="NLoptNet" Version="2.10.1" />
+```
+
+## Platform Support
+
+This package supports:
+- .NET Standard 2.0+
+- .NET 6.0+
+- .NET 8.0+
+- .NET Framework 4.7+
+
+Native binaries are automatically selected for your platform at runtime.
+
+## Building from Source
+
+1. Clone the repository
+2. Run the GitHub Actions workflow to build NLopt binaries for all platforms
+3. Run `dotnet build` to build the managed wrapper
+4. Run `dotnet pack` to create the NuGet package
+
+## License
+
+This wrapper is licensed under the same LGPL 2.1 or later license as NLopt itself. See the [NLopt documentation](https://nlopt.readthedocs.io/) for more details.
+
+## Contributing
+
+Contributions are welcome! Please read through the [NLopt documentation](https://nlopt.readthedocs.io/) before posting questions/issues here.

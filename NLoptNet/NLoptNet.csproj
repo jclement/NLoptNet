@@ -1,25 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<RuntimeIdentifiers>linux-arm64;linux-musl-x64;linux-x64;win-x64;win-x86</RuntimeIdentifiers>
-		<TargetFrameworks>netstandard2.0;net47</TargetFrameworks>
+		<RuntimeIdentifiers>linux-arm64;linux-musl-x64;linux-x64;osx-x64;osx-arm64;win-x64;win-x86</RuntimeIdentifiers>
+		<TargetFrameworks>netstandard2.0;net6.0;net8.0</TargetFrameworks>
 		<RootNamespace>NLoptNet</RootNamespace>
-		<PackageVersion>1.4.3</PackageVersion>
+		<PackageVersion>2.10.1</PackageVersion>
 		<Platforms>AnyCPU;x86</Platforms>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<PackageOutputPath>../pack</PackageOutputPath>
 		<PlatformTarget>$(Platform)</PlatformTarget>
 		<OutputPath>bin\$(Platform)\$(Configuration)\</OutputPath>
-		<Authors>Brannon King</Authors>
+		<Authors>Brannon King, Jeff Clement</Authors>
 		<PackageTags>NLopt NLoptNet Optimization Minimization Simplex Stogo Cobyla BFGS</PackageTags>
-		<PackageReleaseNotes>Fixed size of gradient array in callback</PackageReleaseNotes>
-		<RepositoryUrl>https://github.com/BrannonKing/NLoptNet</RepositoryUrl>
-		<AssemblyVersion>1.4.3</AssemblyVersion>
-		<FileVersion>1.4.3</FileVersion>
+		<PackageReleaseNotes>Updated to NLopt 2.10.1, added macOS support (x64 and arm64), modernized target frameworks</PackageReleaseNotes>
+		<RepositoryUrl>https://github.com/jclement/NLoptNet</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/jclement/NLoptNet</PackageProjectUrl>
+		<PackageLicenseExpression>LGPL-2.1-or-later</PackageLicenseExpression>
+		<AssemblyVersion>2.10.1.0</AssemblyVersion>
+		<FileVersion>2.10.1.0</FileVersion>
 		<Title>NLoptNet</Title>
-		<Description>This is a wrapper around the NLopt library. NLopt binaries are included.</Description>
-		<Copyright>2022</Copyright>
+		<Description>This is a wrapper around the NLopt library. NLopt 2.10.1 binaries are included for Windows, Linux, and macOS (including Apple Silicon).</Description>
+		<Copyright>2026</Copyright>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
@@ -35,33 +37,54 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Include="runtimes\linux-arm64\native\nlopt.so" Pack="true" PackagePath="runtimes/linux-arm64/native/nlopt.so">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
+		<!-- Linux x64 -->
 		<None Include="runtimes\linux-x64\native\nlopt.so" Pack="true" PackagePath="runtimes/linux-x64/native/nlopt.so">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+
+		<!-- Linux arm64 -->
+		<None Include="runtimes\linux-arm64\native\nlopt.so" Pack="true" PackagePath="runtimes/linux-arm64/native/nlopt.so">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+
+		<!-- Linux musl x64 (Alpine) -->
 		<None Include="runtimes\linux-musl-x64\native\nlopt.so" Pack="true" PackagePath="runtimes/linux-musl-x64/native/nlopt.so">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+
+		<!-- macOS x64 (Intel) -->
+		<None Include="runtimes\osx-x64\native\libnlopt.dylib" Pack="true" PackagePath="runtimes/osx-x64/native/libnlopt.dylib">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+
+		<!-- macOS arm64 (Apple Silicon) -->
+		<None Include="runtimes\osx-arm64\native\libnlopt.dylib" Pack="true" PackagePath="runtimes/osx-arm64/native/libnlopt.dylib">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+
+		<!-- Windows x64 -->
 		<None Include="runtimes\win-x64\native\nlopt.dll" Pack="true" PackagePath="runtimes/win-x64/native/nlopt.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Include="runtimes\win-x64\native\nlopt.exp" Pack="true" PackagePath="runtimes/win-x64/native/nlopt.exp">
+		<None Include="runtimes\win-x64\native\nlopt.exp" Pack="true" PackagePath="runtimes/win-x64/native/nlopt.exp" Condition="Exists('runtimes\win-x64\native\nlopt.exp')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Include="runtimes\win-x64\native\nlopt.lib" Pack="true" PackagePath="runtimes/win-x64/native/nlopt.lib">
+		<None Include="runtimes\win-x64\native\nlopt.lib" Pack="true" PackagePath="runtimes/win-x64/native/nlopt.lib" Condition="Exists('runtimes\win-x64\native\nlopt.lib')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+
+		<!-- Windows x86 -->
 		<None Include="runtimes\win-x86\native\nlopt.dll" Pack="true" PackagePath="runtimes/win-x86/native/nlopt.dll">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Include="runtimes\win-x86\native\nlopt.exp" Pack="true" PackagePath="runtimes/win-x86/native/nlopt.exp">
+		<None Include="runtimes\win-x86\native\nlopt.exp" Pack="true" PackagePath="runtimes/win-x86/native/nlopt.exp" Condition="Exists('runtimes\win-x86\native\nlopt.exp')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Include="runtimes\win-x86\native\nlopt.lib" Pack="true" PackagePath="runtimes/win-x86/native/nlopt.lib">
+		<None Include="runtimes\win-x86\native\nlopt.lib" Pack="true" PackagePath="runtimes/win-x86/native/nlopt.lib" Condition="Exists('runtimes\win-x86\native\nlopt.lib')">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
+
+		<!-- Build targets -->
 		<None Include="NLoptNet.targets" Pack="true" PackagePath="build/net47">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>

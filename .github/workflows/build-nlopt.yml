@@ -1,0 +1,317 @@
+name: Build NLopt Native Libraries
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - update-nlopt-2.10.1
+      - main
+  schedule:
+    # Check for new NLopt releases daily at 2am UTC
+    - cron: '0 2 * * *'
+
+env:
+  NLOPT_VERSION: '2.10.1'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      latest_version: ${{ steps.check.outputs.latest_version }}
+    steps:
+      - name: Check latest NLopt release
+        id: check
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/stevengj/nlopt/releases/latest | jq -r .tag_name | sed 's/v//')
+          echo "latest_version=$LATEST" >> $GITHUB_OUTPUT
+
+          if [ "$LATEST" != "${{ env.NLOPT_VERSION }}" ]; then
+            echo "New version available: $LATEST (current: ${{ env.NLOPT_VERSION }})"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version up to date: ${{ env.NLOPT_VERSION }}"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-windows:
+    needs: check-version
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.check-version.outputs.should_build == 'true'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ env.NLOPT_VERSION }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build `
+            -A ${{ matrix.arch == 'x64' && 'x64' || 'Win32' }} `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DNLOPT_CXX=OFF `
+            -DNLOPT_PYTHON=OFF `
+            -DNLOPT_OCTAVE=OFF `
+            -DNLOPT_MATLAB=OFF `
+            -DNLOPT_GUILE=OFF `
+            -DNLOPT_SWIG=OFF `
+            nlopt-source
+        working-directory: ${{ github.workspace }}
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Prepare artifacts
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/win-${{ matrix.arch }}/native"
+          Copy-Item "build/Release/nlopt.dll" "artifacts/win-${{ matrix.arch }}/native/"
+          Copy-Item "build/Release/nlopt.lib" "artifacts/win-${{ matrix.arch }}/native/"
+          if (Test-Path "build/Release/nlopt.exp") {
+            Copy-Item "build/Release/nlopt.exp" "artifacts/win-${{ matrix.arch }}/native/"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-win-${{ matrix.arch }}
+          path: artifacts/win-${{ matrix.arch }}/
+
+  build-linux:
+    needs: check-version
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-linux-gnu
+            rid: linux-x64
+          - arch: arm64
+            target: aarch64-linux-gnu
+            rid: linux-arm64
+          - arch: musl-x64
+            target: x86_64-linux-musl
+            rid: linux-musl-x64
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ env.NLOPT_VERSION }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Install cross-compilation tools
+        if: matrix.arch != 'x64'
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          elif [ "${{ matrix.arch }}" == "musl-x64" ]; then
+            sudo apt-get install -y musl-tools
+          fi
+
+      - name: Configure CMake (x64)
+        if: matrix.arch == 'x64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNLOPT_CXX=OFF \
+            -DNLOPT_PYTHON=OFF \
+            -DNLOPT_OCTAVE=OFF \
+            -DNLOPT_MATLAB=OFF \
+            -DNLOPT_GUILE=OFF \
+            -DNLOPT_SWIG=OFF \
+            nlopt-source
+
+      - name: Configure CMake (arm64)
+        if: matrix.arch == 'arm64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNLOPT_CXX=OFF \
+            -DNLOPT_PYTHON=OFF \
+            -DNLOPT_OCTAVE=OFF \
+            -DNLOPT_MATLAB=OFF \
+            -DNLOPT_GUILE=OFF \
+            -DNLOPT_SWIG=OFF \
+            nlopt-source
+
+      - name: Configure CMake (musl-x64)
+        if: matrix.arch == 'musl-x64'
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=musl-gcc \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNLOPT_CXX=OFF \
+            -DNLOPT_PYTHON=OFF \
+            -DNLOPT_OCTAVE=OFF \
+            -DNLOPT_MATLAB=OFF \
+            -DNLOPT_GUILE=OFF \
+            -DNLOPT_SWIG=OFF \
+            nlopt-source
+
+      - name: Build
+        run: cmake --build build --config Release -j$(nproc)
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}/native
+          cp build/libnlopt.so* artifacts/${{ matrix.rid }}/native/ || cp build/libnlopt.so artifacts/${{ matrix.rid }}/native/
+          # Keep only the main .so file, rename if versioned
+          cd artifacts/${{ matrix.rid }}/native
+          if [ -f "libnlopt.so.0" ]; then
+            cp libnlopt.so.0 nlopt.so
+          elif [ -f "libnlopt.so" ]; then
+            cp libnlopt.so nlopt.so
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}/
+
+  build-macos:
+    needs: check-version
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.check-version.outputs.should_build == 'true'
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            cmake_arch: x86_64
+            rid: osx-x64
+          - arch: arm64
+            cmake_arch: arm64
+            rid: osx-arm64
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ env.NLOPT_VERSION }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNLOPT_CXX=OFF \
+            -DNLOPT_PYTHON=OFF \
+            -DNLOPT_OCTAVE=OFF \
+            -DNLOPT_MATLAB=OFF \
+            -DNLOPT_GUILE=OFF \
+            -DNLOPT_SWIG=OFF \
+            nlopt-source
+
+      - name: Build
+        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}/native
+          cp build/libnlopt.dylib artifacts/${{ matrix.rid }}/native/ || cp build/libnlopt.*.dylib artifacts/${{ matrix.rid }}/native/libnlopt.dylib
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}/
+
+  collect-artifacts:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Organize artifacts into runtimes folder
+        run: |
+          mkdir -p NLoptNet/runtimes
+
+          # Copy all platform artifacts
+          for artifact in downloaded-artifacts/nlopt-*; do
+            platform=$(basename "$artifact" | sed 's/nlopt-//')
+            cp -r "$artifact"/* NLoptNet/runtimes/
+          done
+
+          # Show what we built
+          echo "Built artifacts:"
+          find NLoptNet/runtimes -type f
+
+      - name: Create release artifacts
+        run: |
+          cd NLoptNet/runtimes
+          tar -czf ../../nlopt-${{ env.NLOPT_VERSION }}-runtimes.tar.gz .
+
+      - name: Upload combined artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-all-platforms
+          path: |
+            NLoptNet/runtimes/
+            nlopt-${{ env.NLOPT_VERSION }}-runtimes.tar.gz
+
+  create-release:
+    needs: [check-version, collect-artifacts]
+    if: needs.check-version.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: nlopt-all-platforms
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: nlopt-${{ needs.check-version.outputs.latest_version }}
+          name: NLopt ${{ needs.check-version.outputs.latest_version }} Binaries
+          body: |
+            Automated build of NLopt ${{ needs.check-version.outputs.latest_version }} native libraries for all platforms.
+
+            Platforms included:
+            - Windows (x64, x86)
+            - Linux (x64, arm64, musl-x64)
+            - macOS (x64, arm64)
+          files: |
+            nlopt-*.tar.gz
+          draft: false
+          prerelease: false

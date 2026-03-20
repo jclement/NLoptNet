@@ -6,8 +6,8 @@
     public partial class NLoptSolver
     {
 		#region Imported NLOpt functions - .NET Standard
-		
-		#if NETSTANDARD
+
+		#if NETSTANDARD || NET6_0_OR_GREATER
 		
 		[DllImport("nlopt", CallingConvention = CallingConvention.Cdecl)]
 		private static extern void nlopt_version(out int major, out int minor, out int bugfix);

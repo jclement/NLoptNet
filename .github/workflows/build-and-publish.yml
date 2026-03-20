@@ -291,10 +291,17 @@ jobs:
         run: |
           mkdir -p NLoptNet/runtimes
 
-          # Copy all platform artifacts to runtimes folder
+          # Copy all platform artifacts to runtimes folder, preserving structure
           for artifact in downloaded-artifacts/nlopt-*; do
             if [ -d "$artifact" ]; then
-              cp -r "$artifact"/* NLoptNet/runtimes/
+              # Extract RID from artifact name (nlopt-linux-x64 -> linux-x64)
+              rid=$(basename "$artifact" | sed 's/^nlopt-//')
+              echo "Processing $rid from $artifact"
+              # Create target directory and copy files
+              mkdir -p "NLoptNet/runtimes/$rid/native"
+              cp -v "$artifact"/$rid/native/* "NLoptNet/runtimes/$rid/native/" 2>/dev/null || \
+              cp -v "$artifact"/native/* "NLoptNet/runtimes/$rid/native/" 2>/dev/null || \
+              echo "Warning: Could not copy files for $rid"
             fi
           done
 

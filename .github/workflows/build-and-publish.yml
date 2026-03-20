@@ -368,6 +368,7 @@ jobs:
           dotnet add package JClement.NLoptNet --source ../package --prerelease
 
       - name: Test library loading
+        shell: bash
         run: |
           cd NLoptTest
           cat > Program.cs << 'EOF'

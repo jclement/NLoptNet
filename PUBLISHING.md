@@ -1,226 +1,231 @@
 # Publishing NLoptNet to NuGet
 
-## Prerequisites
+## Fully Automated Publication
 
-1. **GitHub Repository Setup**
-   - Fork is at: https://github.com/jclement/NLoptNet
-   - Branch `update-nlopt-2.10.1` has all modernization changes
+The `build-and-publish.yml` workflow handles everything automatically:
 
-2. **NuGet.org Account**
-   - Create account at https://www.nuget.org/
-   - Generate API key at https://www.nuget.org/account/apikeys
-   - Add as GitHub secret: `NUGET_API_KEY`
+1. **Daily Version Checks** (2am UTC)
+   - Detects new NLopt releases from GitHub
+   - Automatically builds and publishes if new version found
 
-3. **GitHub Secrets Setup**
-   - Go to: https://github.com/jclement/NLoptNet/settings/secrets/actions
-   - Add secret: `NUGET_API_KEY` with your NuGet API key
+2. **Complete Build Process**
+   - Builds NLopt from source for all platforms
+   - Creates NuGet package with all native binaries
+   - Tests on Windows, Linux, and macOS
+   - Publishes to NuGet.org
+   - Creates GitHub release with git tag
 
-## Step-by-Step Publishing Process
+## One-Time Setup
 
-### Step 1: Build Native Libraries
+### Configure NuGet Publishing
 
-The first workflow builds NLopt 2.10.1 from source for all platforms.
+1. **Get NuGet API Key**
+   - Go to https://www.nuget.org/account/apikeys
+   - Create new API key with "Push" permission
+   - Select packages: `NLoptNet`
+   - Set expiration (or no expiration)
 
-1. Go to: https://github.com/jclement/NLoptNet/actions/workflows/build-nlopt.yml
+2. **Add to GitHub Secrets**
+   - Go to https://github.com/jclement/NLoptNet/settings/secrets/actions
+   - Click "New repository secret"
+   - Name: `NUGET_API_KEY`
+   - Value: Your API key from step 1
+   - Click "Add secret"
+
+**That's it!** The workflow is now fully automated.
+
+## How It Works
+
+### Automatic Publication (Daily)
+
+Every day at 2am UTC, the workflow:
+1. Checks for new NLopt releases
+2. If new version found:
+   - Builds native binaries for all platforms
+   - Updates package version automatically
+   - Builds NuGet package
+   - Runs tests on all platforms
+   - Publishes to NuGet.org
+   - Creates GitHub release with tag `v{version}`
+
+### Manual Trigger
+
+To manually build and publish a specific version:
+
+1. Go to https://github.com/jclement/NLoptNet/actions/workflows/build-and-publish.yml
 2. Click "Run workflow"
-3. Select branch: `update-nlopt-2.10.1`
+3. Enter NLopt version (e.g., `2.10.1`) or leave as `latest`
 4. Click "Run workflow"
 
-This will:
-- Build NLopt for Windows (x86, x64)
-- Build NLopt for Linux (x64, arm64, musl-x64)
-- Build NLopt for macOS (x64, arm64)
-- Upload artifacts to the workflow run
-- Create `runtimes/` folder structure
+The workflow will:
+- Build that specific version
+- Run all tests
+- Publish to NuGet.org (if version doesn't already exist)
+- Create GitHub release
 
-**Expected output:**
-- Artifacts for each platform in the workflow run
-- All binaries combined in `nlopt-all-platforms` artifact
+## What Gets Published
 
-### Step 2: Download and Commit Binaries
+### NuGet.org Package
 
-1. Download the `nlopt-all-platforms` artifact from the workflow run
-2. Extract it to `/workspace/group/NLoptNet/NLoptNet/runtimes/`
-3. Verify the structure:
+Package: https://www.nuget.org/packages/NLoptNet/
 
-```
-NLoptNet/runtimes/
-├── linux-arm64/native/nlopt.so
-├── linux-musl-x64/native/nlopt.so
-├── linux-x64/native/nlopt.so
-├── osx-arm64/native/libnlopt.dylib
-├── osx-x64/native/libnlopt.dylib
-├── win-x64/native/nlopt.dll
-└── win-x86/native/nlopt.dll
-```
-
-4. Commit and push:
-
+Installation:
 ```bash
-cd /workspace/group/NLoptNet
-git add NLoptNet/runtimes/
-git commit -m "Add NLopt 2.10.1 native binaries for all platforms
-
-Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
-git push
+dotnet add package NLoptNet --version {version}
 ```
 
-### Step 3: Build and Test NuGet Package Locally
+Includes native binaries for:
+- Windows x86, x64
+- Linux x64, arm64, musl-x64 (Alpine)
+- macOS x64 (Intel), arm64 (Apple Silicon)
 
-```bash
-cd /workspace/group/NLoptNet
+### GitHub Release
 
-# Restore dependencies
-dotnet restore NLoptNet/NLoptNet.csproj
+Release: https://github.com/jclement/NLoptNet/releases
 
-# Build
-dotnet build NLoptNet/NLoptNet.csproj --configuration Release
+Each release includes:
+- Git tag `v{version}`
+- NuGet package (.nupkg file)
+- Release notes with installation instructions
 
-# Pack
-dotnet pack NLoptNet/NLoptNet.csproj --configuration Release --output ./pack
+## Version Management
 
-# Verify package contents
-unzip -l pack/NLoptNet.2.10.1.nupkg | grep runtimes
-```
+The workflow automatically:
+- Detects NLopt version from upstream repository
+- Updates `.csproj` file with new version
+- Creates git tag for that version
+- Only publishes if version is new (won't re-publish existing versions)
 
-You should see all runtime-specific binaries listed.
+## Monitoring
 
-### Step 4: Merge to Main Branch
+### Check Workflow Status
 
-1. Create pull request from `update-nlopt-2.10.1` to `main`
-2. Review changes
-3. Merge the PR
+View all workflow runs:
+https://github.com/jclement/NLoptNet/actions/workflows/build-and-publish.yml
 
-### Step 5: Create Release Tag
+### Workflow Notifications
 
-```bash
-cd /workspace/group/NLoptNet
-git checkout main
-git pull
+GitHub will notify you:
+- Email on workflow failures
+- Can configure Slack/Teams/Discord notifications in workflow
 
-# Create and push tag
-git tag -a v2.10.1 -m "NLoptNet 2.10.1 - Updated to NLopt 2.10.1 with macOS support"
-git push origin v2.10.1
-```
+### NuGet Publication Status
 
-### Step 6: Automatic Publishing
-
-Once you push the `v2.10.1` tag, the `build-package.yml` workflow automatically:
-1. Builds the NuGet package
-2. Publishes to NuGet.org (using `NUGET_API_KEY` secret)
-3. Publishes to GitHub Packages
-
-Monitor at: https://github.com/jclement/NLoptNet/actions
-
-### Step 7: Verify Publication
-
+After workflow completes:
 1. Check NuGet.org: https://www.nuget.org/packages/NLoptNet/
-2. Wait for indexing (can take 15-30 minutes)
+2. May take 15-30 minutes for indexing
 3. Test installation:
-
-```bash
-dotnet new console -n NLoptTest
-cd NLoptTest
-dotnet add package NLoptNet --version 2.10.1
-```
-
-## Alternative: Manual Publishing
-
-If you prefer to publish manually:
-
-```bash
-cd /workspace/group/NLoptNet
-
-# Build package
-dotnet pack NLoptNet/NLoptNet.csproj --configuration Release --output ./pack
-
-# Publish to NuGet.org
-dotnet nuget push ./pack/NLoptNet.2.10.1.nupkg \
-  --api-key YOUR_API_KEY \
-  --source https://api.nuget.org/v3/index.json
-```
-
-## Automated Version Updates
-
-The `build-nlopt.yml` workflow runs daily (2am UTC) to check for new NLopt releases.
-
-If a new version is found:
-1. It builds binaries automatically
-2. Creates a GitHub release with artifacts
-3. You can then update the version in `.csproj` and publish
-
-To manually trigger version check:
-1. Go to: https://github.com/jclement/NLoptNet/actions/workflows/build-nlopt.yml
-2. Click "Run workflow"
-
-## Package Maintenance
-
-### Updating to a New NLopt Version
-
-When a new NLopt version is released (e.g., 2.10.2):
-
-1. Update `NLOPT_VERSION` in `.github/workflows/build-nlopt.yml`:
-   ```yaml
-   env:
-     NLOPT_VERSION: '2.10.2'
+   ```bash
+   dotnet new console -n test
+   cd test
+   dotnet add package NLoptNet --version {version}
    ```
 
-2. Update version in `NLoptNet/NLoptNet.csproj`:
-   ```xml
-   <PackageVersion>2.10.2</PackageVersion>
-   <AssemblyVersion>2.10.2.0</AssemblyVersion>
-   <FileVersion>2.10.2.0</FileVersion>
-   ```
+## Testing Before Publication
 
-3. Run build workflow to generate new binaries
-4. Download and commit binaries
-5. Create new tag and push
+The workflow includes automatic testing on all platforms:
 
-### Testing Before Release
+1. **Build Test** - Verifies package builds correctly
+2. **Integration Test** - Creates test project, adds package, runs optimization
+3. **Platform Test** - Runs on Ubuntu, Windows, macOS runners
 
-Always test the package locally before publishing:
+Tests must pass before publication to NuGet.
+
+To test locally before triggering workflow:
 
 ```bash
-# Build local package
-dotnet pack --configuration Release --output ./pack
+# Clone repo
+git clone https://github.com/jclement/NLoptNet.git
+cd NLoptNet
 
-# Test in a separate project
-dotnet new console -n TestProject
-cd TestProject
-dotnet add package NLoptNet --source ../NLoptNet/pack
+# Manually run the workflow or test specific platform
+# (The workflow handles cross-compilation, local testing is limited to your platform)
 ```
 
 ## Troubleshooting
 
-### Build Failures
+### Workflow Fails on Build
 
-**Windows build fails:**
-- Check CMake is installed on Windows runner
-- Verify architecture flags (`x64` vs `Win32`)
+**Symptom:** Build job fails on specific platform
 
-**Linux cross-compilation fails:**
-- Ensure cross-compilation tools are installed
-- Check `gcc-aarch64-linux-gnu` for arm64 builds
-- Check `musl-tools` for musl builds
+**Solutions:**
+- Check CMake configuration for that platform
+- Verify cross-compilation tools are available
+- Check NLopt source for build issues (may need patches)
 
-**macOS build fails:**
-- Verify `CMAKE_OSX_ARCHITECTURES` is set correctly
-- Check Xcode Command Line Tools are available
+### Tests Fail
 
-### Publishing Failures
+**Symptom:** Test job fails on specific platform
 
-**NuGet.org rejects package:**
-- Version already exists (can't overwrite)
-- Invalid package metadata
-- Missing required fields
+**Solutions:**
+- Library may not be loading correctly
+- Check DllImport names match native library names
+- Verify runtime-specific paths are correct
 
-**Package doesn't include binaries:**
-- Check `<None Include="runtimes/...">` entries in `.csproj`
-- Verify files exist in repository
-- Check `Pack="true"` is set
+### Publication Fails
+
+**Symptom:** Publish job fails with authentication error
+
+**Solutions:**
+- Check `NUGET_API_KEY` secret is set correctly
+- Verify API key has "Push" permission
+- Check API key hasn't expired
+
+**Symptom:** "Version already exists" error
+
+**Solutions:**
+- This is normal - workflow detects existing versions and skips
+- To force rebuild, manually increment version and trigger workflow
+
+### Package Missing Native Binaries
+
+**Symptom:** Package installs but fails to load native library
+
+**Solutions:**
+- Check `.csproj` includes all `<None Include="runtimes/...">` entries
+- Verify artifacts were downloaded correctly in workflow
+- Check `PackagePath` matches expected structure
+
+## Manual Publishing (Not Recommended)
+
+If you need to publish manually for some reason:
+
+```bash
+# Build package locally (requires all native binaries)
+dotnet pack NLoptNet/NLoptNet.csproj --configuration Release --output ./pack
+
+# Publish to NuGet.org
+dotnet nuget push ./pack/NLoptNet.{version}.nupkg \
+  --api-key YOUR_API_KEY \
+  --source https://api.nuget.org/v3/index.json
+```
+
+**Note:** This requires you to manually build all native binaries first. The automated workflow is strongly recommended.
+
+## Updating Workflow
+
+To modify the build/publish process:
+
+1. Edit `.github/workflows/build-and-publish.yml`
+2. Test changes on a branch
+3. Merge to `main` when ready
+
+The workflow file itself is version-controlled, so changes are tracked.
 
 ## Support
 
-- Issues: https://github.com/jclement/NLoptNet/issues
-- NLopt Documentation: https://nlopt.readthedocs.io/
-- NuGet Package Page: https://www.nuget.org/packages/NLoptNet/
+- **Workflow Issues:** https://github.com/jclement/NLoptNet/issues
+- **NLopt Issues:** https://github.com/stevengj/nlopt/issues
+- **NuGet Issues:** https://github.com/NuGet/Home/issues
+
+## Summary
+
+With the `NUGET_API_KEY` secret configured, the entire process is fully automated:
+
+✅ Daily checks for new NLopt versions
+✅ Automatic builds for all platforms
+✅ Automatic testing
+✅ Automatic publication to NuGet.org
+✅ Automatic GitHub releases with tags
+
+**You don't need to do anything.** New NLopt versions will automatically become available as NuGet packages within a few hours of release.

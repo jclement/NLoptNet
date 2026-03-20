@@ -28,51 +28,29 @@
 
 ## 📋 Next Steps to Publish
 
-### 1. Build Native Binaries
+### One-Time Setup
 
-Run the build-nlopt workflow to generate native libraries:
-- Go to: https://github.com/jclement/NLoptNet/actions/workflows/build-nlopt.yml
-- Click "Run workflow" on `update-nlopt-2.10.1` branch
-- Download the `nlopt-all-platforms` artifact
-- Extract to `NLoptNet/runtimes/`
-- Commit and push the binaries
+1. **Configure NuGet API Key**
+   - Get API key from https://www.nuget.org/account/apikeys
+   - Add as GitHub secret `NUGET_API_KEY` at:
+     https://github.com/jclement/NLoptNet/settings/secrets/actions
 
-### 2. Test the Package Locally
+### Trigger First Build
 
-```bash
-cd /workspace/group/NLoptNet
-dotnet restore NLoptNet/NLoptNet.csproj
-dotnet build NLoptNet/NLoptNet.csproj --configuration Release
-dotnet pack NLoptNet/NLoptNet.csproj --configuration Release --output ./pack
-```
+2. **Run the Workflow**
+   - Go to: https://github.com/jclement/NLoptNet/actions/workflows/build-and-publish.yml
+   - Click "Run workflow"
+   - Enter version `2.10.1` (or leave as `latest`)
+   - Click "Run workflow"
 
-Verify the package contains all runtime binaries:
-```bash
-unzip -l pack/NLoptNet.2.10.1.nupkg | grep runtimes
-```
+The workflow will automatically:
+- Build native binaries for all platforms
+- Create NuGet package
+- Test on Windows, Linux, macOS
+- Publish to NuGet.org
+- Create GitHub release with git tag
 
-### 3. Merge to Main and Tag
-
-```bash
-# After testing, merge the PR to main
-git checkout main
-git pull
-git tag -a v2.10.1 -m "NLoptNet 2.10.1 - Updated to NLopt 2.10.1 with macOS support"
-git push origin v2.10.1
-```
-
-### 4. Set Up NuGet.org Publishing
-
-- Create NuGet.org account (or use existing)
-- Generate API key at https://www.nuget.org/account/apikeys
-- Add as GitHub secret `NUGET_API_KEY` at:
-  https://github.com/jclement/NLoptNet/settings/secrets/actions
-
-### 5. Automatic Publishing
-
-Once the tag is pushed, the workflow automatically publishes to:
-- NuGet.org (after secret is configured)
-- GitHub Packages
+**That's it!** After this, new NLopt versions will automatically be detected and published daily.
 
 ## 🎯 What This Achieves
 

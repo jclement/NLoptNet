@@ -365,7 +365,7 @@ jobs:
         run: |
           dotnet new console -n NLoptTest
           cd NLoptTest
-          dotnet add package NLoptNet --source ../package --prerelease
+          dotnet add package JClement.NLoptNet --source ../package --prerelease
 
       - name: Test library loading
         run: |

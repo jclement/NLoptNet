@@ -18,6 +18,7 @@
 		<RepositoryUrl>https://github.com/jclement/NLoptNet</RepositoryUrl>
 		<PackageProjectUrl>https://github.com/jclement/NLoptNet</PackageProjectUrl>
 		<PackageLicenseExpression>LGPL-2.1-or-later</PackageLicenseExpression>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<AssemblyVersion>2.10.1.0</AssemblyVersion>
 		<FileVersion>2.10.1.0</FileVersion>
 		<Title>JClement.NLoptNet</Title>
@@ -38,6 +39,9 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- README for NuGet package -->
+		<None Include="README.md" Pack="true" PackagePath="/"/>
+
 		<!-- Linux x64 -->
 		<None Include="runtimes\linux-x64\native\nlopt.so" Pack="true" PackagePath="runtimes/linux-x64/native/nlopt.so">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

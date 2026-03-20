@@ -1,0 +1,500 @@
+name: Build and Publish NLoptNet
+
+on:
+  workflow_dispatch:
+    inputs:
+      nlopt_version:
+        description: 'NLopt version to build (e.g., 2.10.1)'
+        required: false
+        default: 'latest'
+  schedule:
+    # Check for new NLopt releases daily at 2am UTC
+    - cron: '0 2 * * *'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-and-publish.yml'
+      - 'NLoptNet/**'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+
+jobs:
+  detect-version:
+    name: Detect NLopt Version
+    runs-on: ubuntu-latest
+    outputs:
+      nlopt_version: ${{ steps.version.outputs.nlopt_version }}
+      should_build: ${{ steps.version.outputs.should_build }}
+      is_new_version: ${{ steps.version.outputs.is_new_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine NLopt version
+        id: version
+        run: |
+          # Get latest NLopt release from GitHub
+          LATEST=$(curl -s https://api.github.com/repos/stevengj/nlopt/releases/latest | jq -r .tag_name | sed 's/^v//')
+          echo "Latest NLopt version: $LATEST"
+
+          # Use manual input if provided, otherwise use latest
+          if [ "${{ github.event.inputs.nlopt_version }}" != "" ] && [ "${{ github.event.inputs.nlopt_version }}" != "latest" ]; then
+            VERSION="${{ github.event.inputs.nlopt_version }}"
+            echo "Using manual version: $VERSION"
+          else
+            VERSION="$LATEST"
+            echo "Using latest version: $VERSION"
+          fi
+
+          echo "nlopt_version=$VERSION" >> $GITHUB_OUTPUT
+
+          # Check if we already have a tag for this version
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Version v$VERSION already exists"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "is_new_version=false" >> $GITHUB_OUTPUT
+          else
+            echo "New version detected: v$VERSION"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "is_new_version=true" >> $GITHUB_OUTPUT
+          fi
+
+  build-native-windows:
+    name: Build Native Libraries - Windows
+    needs: detect-version
+    if: needs.detect-version.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, x86]
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ needs.detect-version.outputs.nlopt_version }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build `
+            -A ${{ matrix.arch == 'x64' && 'x64' || 'Win32' }} `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=ON `
+            -DNLOPT_CXX=OFF `
+            -DNLOPT_PYTHON=OFF `
+            -DNLOPT_OCTAVE=OFF `
+            -DNLOPT_MATLAB=OFF `
+            -DNLOPT_GUILE=OFF `
+            -DNLOPT_SWIG=OFF `
+            nlopt-source
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Prepare artifacts
+        run: |
+          New-Item -ItemType Directory -Force -Path "artifacts/win-${{ matrix.arch }}/native"
+          Copy-Item "build/Release/nlopt.dll" "artifacts/win-${{ matrix.arch }}/native/"
+          if (Test-Path "build/Release/nlopt.lib") {
+            Copy-Item "build/Release/nlopt.lib" "artifacts/win-${{ matrix.arch }}/native/"
+          }
+          if (Test-Path "build/Release/nlopt.exp") {
+            Copy-Item "build/Release/nlopt.exp" "artifacts/win-${{ matrix.arch }}/native/"
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-win-${{ matrix.arch }}
+          path: artifacts/win-${{ matrix.arch }}/
+
+  build-native-linux:
+    name: Build Native Libraries - Linux
+    needs: detect-version
+    if: needs.detect-version.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-linux-gnu
+            rid: linux-x64
+          - arch: arm64
+            target: aarch64-linux-gnu
+            rid: linux-arm64
+          - arch: musl-x64
+            target: x86_64-linux-musl
+            rid: linux-musl-x64
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ needs.detect-version.outputs.nlopt_version }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Install cross-compilation tools
+        if: matrix.arch != 'x64'
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          elif [ "${{ matrix.arch }}" == "musl-x64" ]; then
+            sudo apt-get install -y musl-tools
+          fi
+
+      - name: Configure and Build
+        run: |
+          if [ "${{ matrix.arch }}" == "x64" ]; then
+            cmake -B build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=ON \
+              -DNLOPT_CXX=OFF \
+              -DNLOPT_PYTHON=OFF \
+              -DNLOPT_OCTAVE=OFF \
+              -DNLOPT_MATLAB=OFF \
+              -DNLOPT_GUILE=OFF \
+              -DNLOPT_SWIG=OFF \
+              nlopt-source
+          elif [ "${{ matrix.arch }}" == "arm64" ]; then
+            cmake -B build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_SYSTEM_NAME=Linux \
+              -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+              -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+              -DBUILD_SHARED_LIBS=ON \
+              -DNLOPT_CXX=OFF \
+              -DNLOPT_PYTHON=OFF \
+              -DNLOPT_OCTAVE=OFF \
+              -DNLOPT_MATLAB=OFF \
+              -DNLOPT_GUILE=OFF \
+              -DNLOPT_SWIG=OFF \
+              nlopt-source
+          else
+            cmake -B build \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER=musl-gcc \
+              -DBUILD_SHARED_LIBS=ON \
+              -DNLOPT_CXX=OFF \
+              -DNLOPT_PYTHON=OFF \
+              -DNLOPT_OCTAVE=OFF \
+              -DNLOPT_MATLAB=OFF \
+              -DNLOPT_GUILE=OFF \
+              -DNLOPT_SWIG=OFF \
+              nlopt-source
+          fi
+
+          cmake --build build --config Release -j$(nproc)
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}/native
+          # Copy and rename the library
+          if [ -f "build/libnlopt.so.0" ]; then
+            cp build/libnlopt.so.0 artifacts/${{ matrix.rid }}/native/nlopt.so
+          elif [ -f "build/libnlopt.so" ]; then
+            cp build/libnlopt.so artifacts/${{ matrix.rid }}/native/nlopt.so
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}/
+
+  build-native-macos:
+    name: Build Native Libraries - macOS
+    needs: detect-version
+    if: needs.detect-version.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            cmake_arch: x86_64
+            rid: osx-x64
+          - arch: arm64
+            cmake_arch: arm64
+            rid: osx-arm64
+    steps:
+      - name: Checkout NLopt source
+        uses: actions/checkout@v4
+        with:
+          repository: stevengj/nlopt
+          ref: v${{ needs.detect-version.outputs.nlopt_version }}
+          path: nlopt-source
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.cmake_arch }} \
+            -DBUILD_SHARED_LIBS=ON \
+            -DNLOPT_CXX=OFF \
+            -DNLOPT_PYTHON=OFF \
+            -DNLOPT_OCTAVE=OFF \
+            -DNLOPT_MATLAB=OFF \
+            -DNLOPT_GUILE=OFF \
+            -DNLOPT_SWIG=OFF \
+            nlopt-source
+
+      - name: Build
+        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}/native
+          # Find and copy the dylib, handling versioned names
+          find build -name "libnlopt*.dylib" -exec cp {} artifacts/${{ matrix.rid }}/native/libnlopt.dylib \;
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nlopt-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}/
+
+  build-nuget-package:
+    name: Build NuGet Package
+    needs: [detect-version, build-native-windows, build-native-linux, build-native-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded-artifacts
+
+      - name: Organize native libraries
+        run: |
+          mkdir -p NLoptNet/runtimes
+
+          # Copy all platform artifacts to runtimes folder
+          for artifact in downloaded-artifacts/nlopt-*; do
+            if [ -d "$artifact" ]; then
+              cp -r "$artifact"/* NLoptNet/runtimes/
+            fi
+          done
+
+          echo "Native libraries organized:"
+          find NLoptNet/runtimes -type f
+
+      - name: Update package version
+        run: |
+          VERSION="${{ needs.detect-version.outputs.nlopt_version }}"
+          sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" NLoptNet/NLoptNet.csproj
+          sed -i "s/<AssemblyVersion>.*<\/AssemblyVersion>/<AssemblyVersion>$VERSION.0<\/AssemblyVersion>/" NLoptNet/NLoptNet.csproj
+          sed -i "s/<FileVersion>.*<\/FileVersion>/<FileVersion>$VERSION.0<\/FileVersion>/" NLoptNet/NLoptNet.csproj
+          sed -i "s/NLopt [0-9.]*/NLopt $VERSION/" NLoptNet/NLoptNet.csproj
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore NLoptNet/NLoptNet.csproj
+
+      - name: Build
+        run: dotnet build NLoptNet/NLoptNet.csproj --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack NLoptNet/NLoptNet.csproj --configuration Release --no-build --output ./artifacts
+
+      - name: Verify package contents
+        run: |
+          unzip -l artifacts/*.nupkg | grep runtimes || echo "Warning: No runtime libraries found in package"
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-package
+          path: ./artifacts/*.nupkg
+
+  test-package:
+    name: Test NuGet Package
+    needs: build-nuget-package
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: ./package
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Create test project
+        run: |
+          dotnet new console -n NLoptTest
+          cd NLoptTest
+          dotnet add package NLoptNet --source ../package --prerelease
+
+      - name: Test library loading
+        run: |
+          cd NLoptTest
+          cat > Program.cs << 'EOF'
+          using System;
+          using NLoptNet;
+
+          class Program
+          {
+              static void Main()
+              {
+                  try
+                  {
+                      using (var solver = new NLoptSolver(NLoptAlgorithm.LN_COBYLA, 1, 0.001, 100))
+                      {
+                          solver.SetLowerBounds(new[] { -10.0 });
+                          solver.SetUpperBounds(new[] { 100.0 });
+                          solver.SetMinObjective(vars => Math.Pow(vars[0] - 3.0, 2.0) + 4.0);
+
+                          var x = new[] { 2.0 };
+                          var result = solver.Optimize(x, out double? score);
+
+                          Console.WriteLine($"Result: {result}");
+                          Console.WriteLine($"Optimal x: {x[0]:F3}");
+                          Console.WriteLine($"Optimal f(x): {score:F3}");
+
+                          if (Math.Abs(x[0] - 3.0) < 0.1 && Math.Abs(score.Value - 4.0) < 0.1)
+                          {
+                              Console.WriteLine("TEST PASSED");
+                              Environment.Exit(0);
+                          }
+                          else
+                          {
+                              Console.WriteLine("TEST FAILED: Incorrect result");
+                              Environment.Exit(1);
+                          }
+                      }
+                  }
+                  catch (Exception ex)
+                  {
+                      Console.WriteLine($"TEST FAILED: {ex.Message}");
+                      Environment.Exit(1);
+                  }
+              }
+          }
+          EOF
+
+          dotnet run
+
+  publish-nuget:
+    name: Publish to NuGet.org
+    needs: [detect-version, test-package]
+    if: needs.detect-version.outputs.is_new_version == 'true' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: ./artifacts
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish to NuGet.org
+        run: |
+          dotnet nuget push ./artifacts/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+  create-release:
+    name: Create GitHub Release
+    needs: [detect-version, publish-nuget]
+    if: needs.detect-version.outputs.is_new_version == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download NuGet package
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-package
+          path: ./artifacts
+
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.detect-version.outputs.nlopt_version }}"
+          git tag -a "v$VERSION" -m "NLoptNet $VERSION - Updated to NLopt $VERSION"
+          git push origin "v$VERSION"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.detect-version.outputs.nlopt_version }}
+          name: NLoptNet ${{ needs.detect-version.outputs.nlopt_version }}
+          body: |
+            NLoptNet ${{ needs.detect-version.outputs.nlopt_version }} - Updated to NLopt ${{ needs.detect-version.outputs.nlopt_version }}
+
+            ## Installation
+
+            ```bash
+            dotnet add package NLoptNet --version ${{ needs.detect-version.outputs.nlopt_version }}
+            ```
+
+            ## Platform Support
+
+            - Windows (x86, x64)
+            - Linux (x64, arm64, musl-x64)
+            - macOS (x64, arm64/Apple Silicon)
+
+            ## What's New
+
+            - Updated to NLopt ${{ needs.detect-version.outputs.nlopt_version }}
+            - All native binaries rebuilt from source
+            - Cross-platform support for .NET Standard 2.0+, .NET 6.0+, .NET 8.0+
+
+            ## NuGet Package
+
+            - NuGet: https://www.nuget.org/packages/NLoptNet/${{ needs.detect-version.outputs.nlopt_version }}
+            - GitHub Packages: https://github.com/jclement/NLoptNet/packages
+
+          files: |
+            artifacts/*.nupkg
+          draft: false
+          prerelease: false
